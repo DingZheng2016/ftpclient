@@ -1,6 +1,7 @@
 import socket
 import re
 import random
+import utils
 
 class MyFTP():
     def __init__(self):
@@ -8,18 +9,30 @@ class MyFTP():
         self.size = 8192
         self.ip = ''
         self.port = 0
+        self.connected = False
 
     def connect(self, ip='127.0.0.1', port=21):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect((ip, port))
-        self.__recv()
+        try:
+            self.sock.connect((ip, port))
+        except Exception:
+            return utils.colorful('connection error.', 'red')
+        res = self.__recv()
+        if res.startswith('220'):
+            self.connected = True
+        return res
 
-    def login(self, username='anonymous', password=''):
+    def login(self, username='anonymous', password='', infoView=None):
+        if infoView:
+            infoView.append(utils.colorful('USER ' + username, 'purple'))
         self.sock.send(('USER ' + username + '\r\n').encode())
         res = self.__recv()
         if res.startswith('331'):
+            if infoView:
+                infoView.append(utils.colorful('PASS ' + password, 'purple'))
             self.sock.send(('PASS ' + password + '\r\n').encode())
-            self.__recv()
+            res = self.__recv()
+        return res
 
     def set_pasv(self, pasv):
         self.pasv = pasv
@@ -43,13 +56,14 @@ class MyFTP():
             self.__send_port()
         self.__send_stor(filename)
 
-    def retrlines(self):
+    def retrlines(self, infoView=None, dir2View=None):
         self.__send_type()
         if(self.pasv):
             self.__send_pasv()
         else:
             self.__send_port()
-        self.__send_list()
+        res = self.__send_list()
+        return res
 
     def cwd(self, dir):
         self.__send_cwd(dir)
@@ -69,20 +83,18 @@ class MyFTP():
 
     def quit(self):
         self.sock.close()
+        self.connected = False
 
     def __recv(self):
         s = ''
         while True:
             res = self.sock.recv(self.size).decode()
-            # print(res)
             s = s + res
             sp = s.split('\n')
             end = False
-            code = 0
             for row in sp:
                 if re.match('[0-9]{3} .*', row):
                     end = True
-                    code = int(row[:3])
                     break
             if end:
                 break
@@ -195,8 +207,9 @@ class MyFTP():
                         break
                     print(res, end='')
 
-        self.__recv()
+        res = self.__recv()
         self.sockf.close()
+        return res
 
     def __send_mkd(self, dirname):
         self.sock.send(('MKD ' + dirname + '\r\n').encode())
@@ -226,5 +239,3 @@ class MyFTP():
     def sendcmd(self, command):
         self.sock.send((command + '\r\n').encode())
         self.__recv()
-
-

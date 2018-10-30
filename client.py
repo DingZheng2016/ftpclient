@@ -6,6 +6,8 @@ class MyFTP():
     def __init__(self):
         self.pasv = True
         self.size = 8192
+        self.ip = ''
+        self.port = 0
 
     def connect(self, ip='127.0.0.1', port=21):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -18,8 +20,6 @@ class MyFTP():
         if res.startswith('331'):
             self.sock.send(('PASS ' + password + '\r\n').encode())
             self.__recv()
-        else:
-            pass
 
     def set_pasv(self, pasv):
         self.pasv = pasv
@@ -52,22 +52,23 @@ class MyFTP():
         self.__send_list()
 
     def cwd(self, dir):
-        pass
+        self.__send_cwd(dir)
 
-    def pwd(self, dir):
-        pass
+    def pwd(self):
+        self.__send_pwd()
 
     def mkd(self, dir):
-        pass
+        self.__send_mkd(dir)
 
     def rmd(self, dir):
-        pass
+        self.__send_rmd(dir)
 
     def rename(self, name_old, name_new):
-        pass
+        self.__send_rnfr(name_old)
+        self.__send_rnto(name_new)
 
     def quit(self):
-        pass
+        self.sock.close()
 
     def __recv(self):
         s = ''
@@ -77,9 +78,11 @@ class MyFTP():
             s = s + res
             sp = s.split('\n')
             end = False
+            code = 0
             for row in sp:
                 if re.match('[0-9]{3} .*', row):
                     end = True
+                    code = int(row[:3])
                     break
             if end:
                 break
@@ -99,8 +102,6 @@ class MyFTP():
             numl = raw.split(',')
             self.ip = '.'.join(numl[:4])
             self.port = int(numl[4]) * 256 + int(numl[5])
-        else:
-            print('pasv error')
 
     def __send_port(self):
         self.ip = '127.0.0.1'
@@ -149,7 +150,6 @@ class MyFTP():
         if self.pasv:
             self.sockf.connect((self.ip, self.port))
             res = self.__recv()
-            # print(res, end='')
             with open(filename, 'rb') as f:
                 while True:
                     rep = f.read(self.size)
@@ -174,21 +174,57 @@ class MyFTP():
 
     def __send_list(self):
         self.sock.send(('LIST' + '\r\n').encode())
+        self.sockf = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        if self.pasv:
+            self.sockf.connect((self.ip, self.port))
+            res = self.__recv()
+            while True:
+                res = self.sockf.recv(self.size).decode()
+                if not res:
+                    break
+                print(res, end='')
+        else:
+            self.sockf.bind(('0.0.0.0', self.port))
+            self.sockf.listen(1)
+            res = self.__recv()
+            conn, addr = self.sockf.accept()
+            with conn:
+                while True:
+                    res = conn.recv(self.size)
+                    if not res:
+                        break
+                    print(res, end='')
+
         self.__recv()
+        self.sockf.close()
 
     def __send_mkd(self, dirname):
-        pass
+        self.sock.send(('MKD ' + dirname + '\r\n').encode())
+        self.__recv()
 
     def __send_cwd(self, dirname):
-        pass
+        self.sock.send(('CWD ' + dirname + '\r\n').encode())
+        self.__recv()
 
     def __send_pwd(self):
         self.sock.send(('PWD' + '\r\n').encode())
         self.__recv()
 
     def __send_rmd(self, dirname):
-        pass
+        self.sock.send(('RMD ' + dirname + '\r\n').encode())
+        self.__recv()
 
-#ftp = MyFTP()
-#ftp.connect('127.0.0.1', 10006)
+    def __send_rnfr(self, name_old):
+        self.sock.send(('RNFR ' + name_old + '\r\n').encode())
+        self.__recv()
+
+    def __send_rnto(self, name_new):
+        self.sock.send(('RNTO ' + name_new + '\r\n').encode())
+        self.__recv()
+
+    # just for debug
+    def sendcmd(self, command):
+        self.sock.send((command + '\r\n').encode())
+        self.__recv()
+
 

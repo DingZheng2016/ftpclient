@@ -2,6 +2,7 @@ import socket
 import re
 import random
 import utils
+import time
 
 class MyFTP():
     def __init__(self):
@@ -10,26 +11,38 @@ class MyFTP():
         self.ip = ''
         self.port = 0
         self.connected = False
+        self.q_info = None
+        self.q_dir2 = None
+        self.pipe = None
 
     def connect(self, ip='127.0.0.1', port=21):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
+            self.sock.settimeout(2)
             self.sock.connect((ip, port))
+            self.sock.settimeout(None)
         except Exception:
-            return utils.colorful('connection error.', 'red')
+            if self.pipe:
+                self.pipe.send('error')
+            return 'connection error.'
         res = self.__recv()
         if res.startswith('220'):
             self.connected = True
+            if self.pipe:
+                self.pipe.send('connected')
+        else:
+            if self.pipe:
+                self.pipe.send('error')
         return res
 
-    def login(self, username='anonymous', password='', infoView=None):
-        if infoView:
-            infoView.append(utils.colorful('USER ' + username, 'purple'))
+    def login(self, username='anonymous', password=''):
+        if self.q_info:
+            self.q_info.put(utils.colorful('USER ' + username, 'purple'))
         self.sock.send(('USER ' + username + '\r\n').encode())
         res = self.__recv()
         if res.startswith('331'):
-            if infoView:
-                infoView.append(utils.colorful('PASS ' + password, 'purple'))
+            if self.q_info:
+                self.q_info.put(utils.colorful('PASS ' + password, 'purple'))
             self.sock.send(('PASS ' + password + '\r\n').encode())
             res = self.__recv()
         return res
@@ -56,7 +69,7 @@ class MyFTP():
             self.__send_port()
         self.__send_stor(filename)
 
-    def retrlines(self, infoView=None, dir2View=None):
+    def retrlines(self):
         self.__send_type()
         if(self.pasv):
             self.__send_pasv()
@@ -98,14 +111,20 @@ class MyFTP():
                     break
             if end:
                 break
-        print(s, end='')
+        s.strip('\r\n')
+        if self.q_info:
+            self.q_info.put(utils.readable(s))
         return s
 
     def __send_type(self, t='I'):
+        if self.q_info:
+            self.q_info.put(utils.colorful('TYPE ' + t, 'purple'))
         self.sock.send(('TYPE ' + t + '\r\n').encode())
         self.__recv()
 
     def __send_pasv(self):
+        if self.q_info:
+            self.q_info.put(utils.colorful('PASV', 'purple'))
         self.sock.send(('PASV' + '\r\n').encode())
         res = self.__recv()
         if res.startswith('227 '):
@@ -119,6 +138,9 @@ class MyFTP():
         self.ip = '127.0.0.1'
         self.port = random.randint(20000, 65536)
         portstring = ','.join(self.ip.split('.')) + ',' + str(self.port // 256) + ',' + str(self.port % 256)
+
+        if self.q_info:
+            self.q_info.put(utils.colorful('PORT ' + portstring, 'purple'))
         self.sock.send(('PORT ' + portstring + '\r\n').encode())
         self.__recv()
 
@@ -185,16 +207,20 @@ class MyFTP():
         self.__recv()
 
     def __send_list(self):
+        if self.q_info:
+            self.q_info(utils.colorful('LIST', 'purple'))
         self.sock.send(('LIST' + '\r\n').encode())
         self.sockf = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if self.pasv:
             self.sockf.connect((self.ip, self.port))
             res = self.__recv()
+            dirinfo = ''
             while True:
                 res = self.sockf.recv(self.size).decode()
                 if not res:
                     break
-                print(res, end='')
+                dirinfo = dirinfo + res
+            print(dirinfo, end='')
         else:
             self.sockf.bind(('0.0.0.0', self.port))
             self.sockf.listen(1)
@@ -234,6 +260,26 @@ class MyFTP():
     def __send_rnto(self, name_new):
         self.sock.send(('RNTO ' + name_new + '\r\n').encode())
         self.__recv()
+
+    def run(self, q, q_info, q_dir2, pipe):
+        self.q_info = q_info
+        self.q_dir2 = q_dir2
+        self.pipe = pipe
+        while True:
+            if not q.empty():
+                cmd = q.get()
+                if cmd == 'connect':
+                    ip = q.get()
+                    port = q.get()
+                    self.connect(ip, port)
+                elif cmd == 'login':
+                    username = q.get()
+                    password = q.get()
+                    self.login(username, password)
+                elif cmd == 'exit':
+                    break
+            else:
+                time.sleep(0.000005)
 
     # just for debug
     def sendcmd(self, command):

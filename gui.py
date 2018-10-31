@@ -7,7 +7,7 @@ from PyQt5.QtCore import pyqtSignal
 import multiprocessing
 import threading
 import time
-import os
+import subprocess
 import re
 
 
@@ -106,6 +106,7 @@ class FTPClient(QMainWindow):
 		dir2View = QTableWidget(0, 6)
 		dir2View.setHorizontalHeaderLabels(("Name", "Type", "Size", "Last Modified", "Permissions", "Owner/Group"))
 		dir2View.setShowGrid(False)
+		dir2View.doubleClicked.connect(self.dir2clicked)
 		progressView = QTextBrowser()
 
 		mainLayout = QGridLayout()
@@ -198,7 +199,8 @@ class FTPClient(QMainWindow):
 		self.infoView.append(info)
 
 	def renderDir1(self):
-		listinfo = os.popen('ls -l', 'r').read()
+		proc = subprocess.Popen(['ls', '-l'], stdout=subprocess.PIPE)
+		listinfo = proc.stdout.read().decode()
 		if listinfo == self.dir1info:
 			return
 		self.dir1info = listinfo
@@ -222,12 +224,27 @@ class FTPClient(QMainWindow):
 		for row in listinfo:
 			row = re.sub(' +', ' ', row)
 			cols = row.split(' ')
-			# print(cols)
 			if len(cols) < 9:
 				continue
-			print(len(cols))
 			typ = 'File' if cols[0][0] == '-' else 'Directory'
 			self.appendRow(self.dir2View, [cols[8], typ, cols[4], ' '.join(cols[5:8]), cols[0], '/'.join(cols[2:4])])
+
+	def dir2clicked(self, mi):
+		row = mi.row()
+		col = mi.column()
+		if col > 0:
+			return
+		val = self.dir2View.item(row, col).text()
+		typ = self.dir2View.item(row, 1).text()
+		if typ == 'File':
+			self.q_cmd.put('retr')
+			self.q_cmd.put(val)
+		else:
+			self.q_cmd.put('cd')
+			self.q_cmd.put(val)
+			if not self.parentPipe.recv() == 'cwd':
+				return
+			self.q_cmd.put('list')
 
 	def appendRow(self, dirView, row):
 		pos = dirView.rowCount()

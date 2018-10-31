@@ -81,7 +81,12 @@ class MyFTP():
         return res
 
     def cwd(self, dir):
-        self.__send_cwd(dir)
+        res = self.__send_cwd(dir)
+        if res.startswith('250'):
+            self.pipe.send('cwd')
+        else:
+            self.pipe.send('error')
+        return res
 
     def pwd(self):
         self.__send_pwd()
@@ -250,27 +255,33 @@ class MyFTP():
 
     def __send_mkd(self, dirname):
         self.sock.send(('MKD ' + dirname + '\r\n').encode())
-        self.__recv()
+        res = self.__recv()
+        return res
 
     def __send_cwd(self, dirname):
         self.sock.send(('CWD ' + dirname + '\r\n').encode())
-        self.__recv()
+        res = self.__recv()
+        return res
 
     def __send_pwd(self):
         self.sock.send(('PWD' + '\r\n').encode())
-        self.__recv()
+        res = self.__recv()
+        return res
 
     def __send_rmd(self, dirname):
         self.sock.send(('RMD ' + dirname + '\r\n').encode())
-        self.__recv()
+        res = self.__recv()
+        return res
 
     def __send_rnfr(self, name_old):
         self.sock.send(('RNFR ' + name_old + '\r\n').encode())
-        self.__recv()
+        res = self.__recv()
+        return res
 
     def __send_rnto(self, name_new):
         self.sock.send(('RNTO ' + name_new + '\r\n').encode())
-        self.__recv()
+        res = self.__recv()
+        return res
 
     def run(self, q, q_info, q_dir2, pipe):
         self.q_info = q_info
@@ -289,6 +300,12 @@ class MyFTP():
                     self.login(username, password)
                 elif cmd == 'list':
                     self.retrlines()
+                elif cmd == 'cd':
+                    d = q.get()
+                    self.cwd(d)
+                elif cmd == 'retr':
+                    d = q.get()
+                    self.retrbinary(d)
                 elif cmd == 'exit':
                     break
             else:

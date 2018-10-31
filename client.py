@@ -51,7 +51,8 @@ class MyFTP():
         self.pasv = pasv
 
     def syst(self):
-        self.__send_syst()
+        res = self.__send_syst()
+        return res
 
     def retrbinary(self, filename):
         self.__send_type()
@@ -59,7 +60,8 @@ class MyFTP():
             self.__send_pasv()
         else:
             self.__send_port()
-        self.__send_retr(filename)
+        res = self.__send_retr(filename)
+        return res
 
     def storbinary(self, filename):
         self.__send_type()
@@ -120,7 +122,8 @@ class MyFTP():
         if self.q_info:
             self.q_info.put(utils.colorful('TYPE ' + t, 'purple'))
         self.sock.send(('TYPE ' + t + '\r\n').encode())
-        self.__recv()
+        res = self.__recv()
+        return res
 
     def __send_pasv(self):
         if self.q_info:
@@ -133,6 +136,7 @@ class MyFTP():
             numl = raw.split(',')
             self.ip = '.'.join(numl[:4])
             self.port = int(numl[4]) * 256 + int(numl[5])
+        return res
 
     def __send_port(self):
         self.ip = '127.0.0.1'
@@ -142,11 +146,13 @@ class MyFTP():
         if self.q_info:
             self.q_info.put(utils.colorful('PORT ' + portstring, 'purple'))
         self.sock.send(('PORT ' + portstring + '\r\n').encode())
-        self.__recv()
+        res = self.__recv()
+        return res
 
     def __send_syst(self):
         self.sock.send(('SYST' + '\r\n').encode())
-        self.__recv()
+        res = self.__recv()
+        return res
 
     def __send_retr(self, filename):
         self.sock.send(('RETR ' + filename + '\r\n').encode())
@@ -175,8 +181,9 @@ class MyFTP():
                             break
                         f.write(res)
 
-        self.__recv()
+        res = self.__recv()
         self.sockf.close()
+        return res
 
     def __send_stor(self, filename):
         self.sock.send(('STOR ' + filename + '\r\n').encode())
@@ -202,13 +209,14 @@ class MyFTP():
                         conn.send(rep)
                         if not rep:
                             break
-    
+
         self.sockf.close()
-        self.__recv()
+        res = self.__recv()
+        return res
 
     def __send_list(self):
         if self.q_info:
-            self.q_info(utils.colorful('LIST', 'purple'))
+            self.q_info.put(utils.colorful('LIST', 'purple'))
         self.sock.send(('LIST' + '\r\n').encode())
         self.sockf = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if self.pasv:
@@ -220,18 +228,21 @@ class MyFTP():
                 if not res:
                     break
                 dirinfo = dirinfo + res
-            print(dirinfo, end='')
         else:
             self.sockf.bind(('0.0.0.0', self.port))
             self.sockf.listen(1)
             res = self.__recv()
             conn, addr = self.sockf.accept()
+            dirinfo = ''
             with conn:
                 while True:
                     res = conn.recv(self.size)
                     if not res:
                         break
-                    print(res, end='')
+                    dirinfo = dirinfo + res
+        print(dirinfo, end='')
+        if self.q_dir2:
+            self.q_dir2.put(dirinfo)
 
         res = self.__recv()
         self.sockf.close()
@@ -276,6 +287,8 @@ class MyFTP():
                     username = q.get()
                     password = q.get()
                     self.login(username, password)
+                elif cmd == 'list':
+                    self.retrlines()
                 elif cmd == 'exit':
                     break
             else:

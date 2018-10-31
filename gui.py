@@ -2,7 +2,7 @@ import sys
 import utils
 from client import MyFTP
 from PyQt5.QtWidgets import QMainWindow, QPushButton, QApplication, QHBoxLayout, \
-	QLabel, QGridLayout, QWidget, QLineEdit, QTextBrowser, QTableWidget
+	QLabel, QGridLayout, QWidget, QLineEdit, QTextBrowser, QTableWidget, QTableWidgetItem
 from PyQt5.QtCore import pyqtSignal
 import multiprocessing
 import threading
@@ -14,15 +14,17 @@ import re
 class FTPClient(QMainWindow):
 
 	sig_info = pyqtSignal(str)
+	sig_dir2 = pyqtSignal(str)
 
 	def __init__(self):
 		super().__init__()
 		self.title = 'My FTP Client'
 		self.left = 200
 		self.top = 200
-		self.width = 960
-		self.height = 513
+		self.width = 1312
+		self.height = 768
 		self.initUI()
+		self.dir1info = ''
 
 		self.ftp = MyFTP()
 		self.q_info = multiprocessing.Queue()
@@ -31,6 +33,7 @@ class FTPClient(QMainWindow):
 		self.parentPipe, self.childPipe = multiprocessing.Pipe()
 
 		self.sig_info.connect(self.renderInfo)
+		self.sig_dir2.connect(self.renderDir2)
 
 		self.exit = False
 
@@ -99,7 +102,10 @@ class FTPClient(QMainWindow):
 		infoView = QTextBrowser()
 		dir1View = QTableWidget(0, 6)
 		dir1View.setHorizontalHeaderLabels(("Name", "Type", "Size", "Last Modified", "Permissions", "Owner/Group"))
-		dir2View = QTextBrowser()
+		dir1View.setShowGrid(False)
+		dir2View = QTableWidget(0, 6)
+		dir2View.setHorizontalHeaderLabels(("Name", "Type", "Size", "Last Modified", "Permissions", "Owner/Group"))
+		dir2View.setShowGrid(False)
 		progressView = QTextBrowser()
 
 		mainLayout = QGridLayout()
@@ -153,7 +159,7 @@ class FTPClient(QMainWindow):
 		self.q_cmd.put(self.username)
 		self.q_cmd.put(self.password)
 
-		# res = self.ftp.retrlines(self.infoView, self.dir2View)
+		self.q_cmd.put('list')
 		# self.infoView.append(utils.readable(res))
 
 	def disconnect(self):
@@ -172,10 +178,19 @@ class FTPClient(QMainWindow):
 			time.sleep(0.000005)
 
 	def recvDir2(self):
-		pass
+		while True:
+			if not self.q_dir2.empty():
+				info = self.q_dir2.get()
+				self.sig_dir2.emit(info)
+			if self.exit:
+				break
+			time.sleep(0.000005)
+
 
 	def updateDir1(self):
 		while True:
+			if self.exit:
+				break
 			self.renderDir1()
 			time.sleep(0.01)
 
@@ -183,8 +198,10 @@ class FTPClient(QMainWindow):
 		self.infoView.append(info)
 
 	def renderDir1(self):
-		print('here')
 		listinfo = os.popen('ls -l', 'r').read()
+		if listinfo == self.dir1info:
+			return
+		self.dir1info = listinfo
 		listinfo = listinfo.split('\n')
 		while self.dir1View.rowCount() > 0:
 			self.dir1View.removeRow(0)
@@ -193,8 +210,30 @@ class FTPClient(QMainWindow):
 			cols = row.split(' ')
 			if len(cols) < 9:
 				continue
-			# append rows
+			print(len(cols))
+			typ = 'File' if cols[0][0] == '-' else 'Directory'
+			self.appendRow(self.dir1View, [cols[8], typ, cols[4], ' '.join(cols[5:8]), cols[0], '/'.join(cols[2:4])])
 
+	def renderDir2(self, listinfo):
+		listinfo = listinfo.split('\n')
+
+		while self.dir2View.rowCount() > 0:
+			self.dir2View.removeRow(0)
+		for row in listinfo:
+			row = re.sub(' +', ' ', row)
+			cols = row.split(' ')
+			# print(cols)
+			if len(cols) < 9:
+				continue
+			print(len(cols))
+			typ = 'File' if cols[0][0] == '-' else 'Directory'
+			self.appendRow(self.dir2View, [cols[8], typ, cols[4], ' '.join(cols[5:8]), cols[0], '/'.join(cols[2:4])])
+
+	def appendRow(self, dirView, row):
+		pos = dirView.rowCount()
+		dirView.insertRow(pos)
+		for i in range(6):
+			dirView.setItem(pos, i, QTableWidgetItem(row[i]))
 
 	def closeEvent(self, event):
 		self.exit = True

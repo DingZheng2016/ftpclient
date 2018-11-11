@@ -35,6 +35,8 @@ class FTPClient(QMainWindow):
 		self.sig_info.connect(self.renderInfo)
 		self.sig_dir2.connect(self.renderDir2)
 
+
+		self.connected = False
 		self.exit = False
 
 		th_info = threading.Thread(target=self.recvInfo)
@@ -103,6 +105,7 @@ class FTPClient(QMainWindow):
 		dir1View = QTableWidget(0, 6)
 		dir1View.setHorizontalHeaderLabels(("Name", "Type", "Size", "Last Modified", "Permissions", "Owner/Group"))
 		dir1View.setShowGrid(False)
+		dir1View.doubleClicked.connect(self.dir1clicked)
 		dir2View = QTableWidget(0, 6)
 		dir2View.setHorizontalHeaderLabels(("Name", "Type", "Size", "Last Modified", "Permissions", "Owner/Group"))
 		dir2View.setShowGrid(False)
@@ -154,6 +157,8 @@ class FTPClient(QMainWindow):
 			self.q_info.put(utils.colorful('connect error.', 'red'))
 			return
 
+		self.connected = True
+
 		self.q_info.put(utils.colorful('Log in as ' + self.username, 'black'))
 
 		self.q_cmd.put('login')
@@ -164,10 +169,10 @@ class FTPClient(QMainWindow):
 		# self.infoView.append(utils.readable(res))
 
 	def disconnect(self):
-		if not self.ftp.connected:
+		if not self.connected:
 			return
-		self.infoView.append(utils.colorful('Disonnected from ' + self.ip + ':' + str(self.port), 'black'))
-		self.ftp.quit()
+		self.q_info.put(utils.colorful('Disonnected from ' + self.ip + ':' + str(self.port), 'black'))
+		self.q_cmd.put('quit')
 
 	def recvInfo(self):
 		while True:
@@ -229,7 +234,24 @@ class FTPClient(QMainWindow):
 			typ = 'File' if cols[0][0] == '-' else 'Directory'
 			self.appendRow(self.dir2View, [cols[8], typ, cols[4], ' '.join(cols[5:8]), cols[0], '/'.join(cols[2:4])])
 
+	def dir1clicked(self, mi):
+		if not self.connected:
+			return
+		row = mi.row()
+		col = mi.column()
+		if col > 0:
+			return
+		val = self.dir1View.item(row, col).text()
+		typ = self.dir1View.item(row, 1).text()
+		if typ == 'File':
+			self.q_cmd.put('stor')
+			self.q_cmd.put(val)
+		else:
+			pass
+
 	def dir2clicked(self, mi):
+		if not self.connected:
+			return
 		row = mi.row()
 		col = mi.column()
 		if col > 0:

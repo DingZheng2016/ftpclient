@@ -63,13 +63,18 @@ class MyFTP():
         res = self.__send_retr(filename)
         return res
 
+    def type(self, t='I'):
+        res = self.__send_type(t)
+        return res
+
     def storbinary(self, filename):
         self.__send_type()
         if(self.pasv):
             self.__send_pasv()
         else:
             self.__send_port()
-        self.__send_stor(filename)
+        res = self.__send_stor(filename)
+        return res
 
     def retrlines(self):
         self.__send_type()
@@ -82,28 +87,35 @@ class MyFTP():
 
     def cwd(self, dir):
         res = self.__send_cwd(dir)
-        if res.startswith('250'):
-            self.pipe.send('cwd')
-        else:
-            self.pipe.send('error')
+        if self.pipe:
+            if res.startswith('250'):
+                self.pipe.send('cwd')
+            else:
+                self.pipe.send('error')
         return res
 
     def pwd(self):
-        self.__send_pwd()
+        res = self.__send_pwd()
+        return res
 
     def mkd(self, dir):
-        self.__send_mkd(dir)
+        res = self.__send_mkd(dir)
+        return res
 
     def rmd(self, dir):
-        self.__send_rmd(dir)
+        res = self.__send_rmd(dir)
+        return res
 
     def rename(self, name_old, name_new):
         self.__send_rnfr(name_old)
-        self.__send_rnto(name_new)
+        res = self.__send_rnto(name_new)
+        return res
 
     def quit(self):
+        res = self.__send_quit()
         self.sock.close()
         self.connected = False
+        return res
 
     def __recv(self):
         s = ''
@@ -155,11 +167,15 @@ class MyFTP():
         return res
 
     def __send_syst(self):
+        if self.q_info:
+            self.q_info.put(utils.colorful('SYST', 'purple'))
         self.sock.send(('SYST' + '\r\n').encode())
         res = self.__recv()
         return res
 
     def __send_retr(self, filename):
+        if self.q_info:
+            self.q_info.put(utils.colorful('RETR ' + filename, 'purple'))
         self.sock.send(('RETR ' + filename + '\r\n').encode())
         self.sockf = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if self.pasv:
@@ -191,7 +207,10 @@ class MyFTP():
         return res
 
     def __send_stor(self, filename):
+        if self.q_info:
+            self.q_info.put(utils.colorful('STOR ' + filename, 'purple'))
         self.sock.send(('STOR ' + filename + '\r\n').encode())
+        print("sent")
         self.sockf = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if self.pasv:
             self.sockf.connect((self.ip, self.port))
@@ -254,32 +273,51 @@ class MyFTP():
         return res
 
     def __send_mkd(self, dirname):
+        if self.q_info:
+            self.q_info.put(utils.colorful('MKD ' + dirname, 'purple'))
         self.sock.send(('MKD ' + dirname + '\r\n').encode())
         res = self.__recv()
         return res
 
     def __send_cwd(self, dirname):
+        if self.q_info:
+            self.q_info.put(utils.colorful('CWD ' + dirname, 'purple'))
         self.sock.send(('CWD ' + dirname + '\r\n').encode())
         res = self.__recv()
         return res
 
     def __send_pwd(self):
+        if self.q_info:
+            self.q_info.put(utils.colorful('PWD', 'purple'))
         self.sock.send(('PWD' + '\r\n').encode())
         res = self.__recv()
         return res
 
     def __send_rmd(self, dirname):
+        if self.q_info:
+            self.q_info.put(utils.colorful('RMD ' + dirname, 'purple'))
         self.sock.send(('RMD ' + dirname + '\r\n').encode())
         res = self.__recv()
         return res
 
     def __send_rnfr(self, name_old):
+        if self.q_info:
+            self.q_info.put(utils.colorful('RNFR ' + name_old, 'purple'))
         self.sock.send(('RNFR ' + name_old + '\r\n').encode())
         res = self.__recv()
         return res
 
     def __send_rnto(self, name_new):
+        if self.q_info:
+            self.q_info.put(utils.colorful('RNTO ' + name_new, 'purple'))
         self.sock.send(('RNTO ' + name_new + '\r\n').encode())
+        res = self.__recv()
+        return res
+
+    def __send_quit(self):
+        if self.q_info:
+            self.q_info.put(utils.colorful('QUIT', 'purple'))
+        self.sock.send(('QUIT' + '\r\n').encode())
         res = self.__recv()
         return res
 
@@ -306,6 +344,12 @@ class MyFTP():
                 elif cmd == 'retr':
                     d = q.get()
                     self.retrbinary(d)
+                elif cmd == 'stor':
+                    d = q.get()
+                    self.storbinary(d)
+                    self.retrlines()
+                elif cmd == 'quit':
+                    self.quit()
                 elif cmd == 'exit':
                     break
             else:

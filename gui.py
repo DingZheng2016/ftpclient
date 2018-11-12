@@ -26,6 +26,8 @@ class FTPClient(QMainWindow):
 		self.initUI()
 		self.dir1info = ''
 
+		self.currentDir = '/'
+
 		self.ftp = MyFTP()
 		self.q_info = multiprocessing.Queue()
 		self.q_dir2 = multiprocessing.Queue()
@@ -204,7 +206,7 @@ class FTPClient(QMainWindow):
 		self.infoView.append(info)
 
 	def renderDir1(self):
-		proc = subprocess.Popen(['ls', '-l'], stdout=subprocess.PIPE)
+		proc = subprocess.Popen(['ls', '-l', self.currentDir], stdout=subprocess.PIPE)
 		listinfo = proc.stdout.read().decode()
 		if listinfo == self.dir1info:
 			return
@@ -212,12 +214,13 @@ class FTPClient(QMainWindow):
 		listinfo = listinfo.split('\n')
 		while self.dir1View.rowCount() > 0:
 			self.dir1View.removeRow(0)
+
+		self.appendRow(self.dir1View, ['..', '', '', '', '', ''])
 		for row in listinfo:
 			row = re.sub(' +', ' ', row)
 			cols = row.split(' ')
 			if len(cols) < 9:
 				continue
-			print(len(cols))
 			typ = 'File' if cols[0][0] == '-' else 'Directory'
 			self.appendRow(self.dir1View, [cols[8], typ, cols[4], ' '.join(cols[5:8]), cols[0], '/'.join(cols[2:4])])
 
@@ -226,6 +229,7 @@ class FTPClient(QMainWindow):
 
 		while self.dir2View.rowCount() > 0:
 			self.dir2View.removeRow(0)
+		self.appendRow(self.dir2View, ['..', '', '', '', '', ''])
 		for row in listinfo:
 			row = re.sub(' +', ' ', row)
 			cols = row.split(' ')
@@ -235,8 +239,6 @@ class FTPClient(QMainWindow):
 			self.appendRow(self.dir2View, [cols[8], typ, cols[4], ' '.join(cols[5:8]), cols[0], '/'.join(cols[2:4])])
 
 	def dir1clicked(self, mi):
-		if not self.connected:
-			return
 		row = mi.row()
 		col = mi.column()
 		if col > 0:
@@ -244,10 +246,14 @@ class FTPClient(QMainWindow):
 		val = self.dir1View.item(row, col).text()
 		typ = self.dir1View.item(row, 1).text()
 		if typ == 'File':
+			if not self.connected:
+				return
 			self.q_cmd.put('stor')
 			self.q_cmd.put(val)
 		else:
-			pass
+			self.currentDir = self.currentDir + val + '/'
+			print(self.currentDir)
+			self.renderDir1()
 
 	def dir2clicked(self, mi):
 		if not self.connected:

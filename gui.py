@@ -2,7 +2,8 @@ import sys
 import utils
 from client import MyFTP
 from PyQt5.QtWidgets import QMainWindow, QPushButton, QApplication, QHBoxLayout, \
-	QLabel, QGridLayout, QWidget, QLineEdit, QTextBrowser, QTableWidget, QTableWidgetItem
+	QLabel, QGridLayout, QWidget, QLineEdit, QTextBrowser, QTableWidget, QTableWidgetItem, \
+	QProgressBar
 from PyQt5.QtCore import pyqtSignal
 import multiprocessing
 import threading
@@ -15,6 +16,7 @@ class FTPClient(QMainWindow):
 
 	sig_info = pyqtSignal(str)
 	sig_dir2 = pyqtSignal(str)
+	sig_progress = pyqtSignal(dict)
 
 	def __init__(self):
 		super().__init__()
@@ -27,15 +29,19 @@ class FTPClient(QMainWindow):
 		self.dir1info = ''
 
 		self.currentDir = '/'
+		self.progressNumber = 0
+		self.progressDic = {}
 
 		self.ftp = MyFTP()
 		self.q_info = multiprocessing.Queue()
 		self.q_dir2 = multiprocessing.Queue()
 		self.q_cmd = multiprocessing.Queue()
+		self.q_progress = multiprocessing.Queue()
 		self.parentPipe, self.childPipe = multiprocessing.Pipe()
 
 		self.sig_info.connect(self.renderInfo)
 		self.sig_dir2.connect(self.renderDir2)
+		self.sig_progress.connect(self.renderProgress)
 
 
 		self.connected = False
@@ -43,13 +49,17 @@ class FTPClient(QMainWindow):
 
 		th_info = threading.Thread(target=self.recvInfo)
 		th_dir2 = threading.Thread(target=self.recvDir2)
-		th_dir1 = threading.Thread(target=self.updateDir1)
+		th_progress = threading.Thread(target=self.updateProgress)
+		# th_dir1 = threading.Thread(target=self.updateDir1)
 		th_info.start()
 		th_dir2.start()
-		th_dir1.start()
+		th_progress.start()
+		# th_dir1.start()
 
-		pc_ftp = multiprocessing.Process(target=self.ftp.run, args=(self.q_cmd, self.q_info, self.q_dir2, self.childPipe))
+		pc_ftp = multiprocessing.Process(target=self.ftp.run, args=(self.q_cmd, self.q_info, self.q_dir2, self.childPipe, self.q_progress))
 		pc_ftp.start()
+
+		self.renderDir1()
 
 	def initUI(self):
 		self.setWindowTitle(self.title)
@@ -112,7 +122,9 @@ class FTPClient(QMainWindow):
 		dir2View.setHorizontalHeaderLabels(("Name", "Type", "Size", "Last Modified", "Permissions", "Owner/Group"))
 		dir2View.setShowGrid(False)
 		dir2View.doubleClicked.connect(self.dir2clicked)
-		progressView = QTextBrowser()
+		progressView = QTableWidget(0, 7)
+		progressView.setHorizontalHeaderLabels(("No.", "Filename", "Status", "Size", "Progress", "Speed", "Remaining Time"))
+		progressView.setShowGrid(False)
 
 		mainLayout = QGridLayout()
 		mainLayout.addLayout(topLayout, 0, 0, 1, 3)
@@ -168,7 +180,6 @@ class FTPClient(QMainWindow):
 		self.q_cmd.put(self.password)
 
 		self.q_cmd.put('list')
-		# self.infoView.append(utils.readable(res))
 
 	def disconnect(self):
 		if not self.connected:
@@ -194,13 +205,23 @@ class FTPClient(QMainWindow):
 				break
 			time.sleep(0.000005)
 
-
+	'''
 	def updateDir1(self):
 		while True:
 			if self.exit:
 				break
 			self.renderDir1()
 			time.sleep(0.01)
+	'''
+
+	def updateProgress(self):
+		while True:
+			if not self.q_progress.empty():
+				dic = self.q_progress.get()
+				self.sig_progress.emit(dic)
+			if self.exit:
+				break
+			# time.sleep(0.000005)
 
 	def renderInfo(self, info):
 		self.infoView.append(info)
@@ -215,28 +236,28 @@ class FTPClient(QMainWindow):
 		while self.dir1View.rowCount() > 0:
 			self.dir1View.removeRow(0)
 
-		self.appendRow(self.dir1View, ['..', '', '', '', '', ''])
+		self.appendDirRow(self.dir1View, ['..', '', '', '', '', ''])
 		for row in listinfo:
 			row = re.sub(' +', ' ', row)
 			cols = row.split(' ')
 			if len(cols) < 9:
 				continue
 			typ = 'File' if cols[0][0] == '-' else 'Directory'
-			self.appendRow(self.dir1View, [cols[8], typ, cols[4], ' '.join(cols[5:8]), cols[0], '/'.join(cols[2:4])])
+			self.appendDirRow(self.dir1View, [cols[8], typ, cols[4], ' '.join(cols[5:8]), cols[0], '/'.join(cols[2:4])])
 
 	def renderDir2(self, listinfo):
 		listinfo = listinfo.split('\n')
 
 		while self.dir2View.rowCount() > 0:
 			self.dir2View.removeRow(0)
-		self.appendRow(self.dir2View, ['..', '', '', '', '', ''])
+		self.appendDirRow(self.dir2View, ['..', '', '', '', '', ''])
 		for row in listinfo:
 			row = re.sub(' +', ' ', row)
 			cols = row.split(' ')
 			if len(cols) < 9:
 				continue
 			typ = 'File' if cols[0][0] == '-' else 'Directory'
-			self.appendRow(self.dir2View, [cols[8], typ, cols[4], ' '.join(cols[5:8]), cols[0], '/'.join(cols[2:4])])
+			self.appendDirRow(self.dir2View, [' '.join(cols[8:]), typ, cols[4], ' '.join(cols[5:8]), cols[0], '/'.join(cols[2:4])])
 
 	def dir1clicked(self, mi):
 		row = mi.row()
@@ -250,6 +271,11 @@ class FTPClient(QMainWindow):
 				return
 			self.q_cmd.put('stor')
 			self.q_cmd.put(val)
+			self.q_cmd.put(self.currentDir)
+			self.progressNumber = self.progressNumber + 1
+			self.q_cmd.put(self.progressNumber)
+			size = int(self.dir1View.item(row, 2).text())
+			self.newProgress(self.progressNumber, val, size, 1)
 		else:
 			self.currentDir = self.currentDir + val + '/'
 			print(self.currentDir)
@@ -267,6 +293,11 @@ class FTPClient(QMainWindow):
 		if typ == 'File':
 			self.q_cmd.put('retr')
 			self.q_cmd.put(val)
+			self.q_cmd.put(self.currentDir)
+			self.progressNumber = self.progressNumber + 1
+			self.q_cmd.put(self.progressNumber)
+			size = int(self.dir2View.item(row, 2).text())
+			self.newProgress(self.progressNumber, val, size, 0)
 		else:
 			self.q_cmd.put('cd')
 			self.q_cmd.put(val)
@@ -274,7 +305,28 @@ class FTPClient(QMainWindow):
 				return
 			self.q_cmd.put('list')
 
-	def appendRow(self, dirView, row):
+	def newProgress(self, number, filename, size, status):
+		pos = self.progressView.rowCount()
+		self.progressView.insertRow(pos)
+		bar = QProgressBar()
+		self.progressView.setItem(pos, 0, QTableWidgetItem(str(number)))
+		self.progressView.setItem(pos, 1, QTableWidgetItem(filename))
+		self.progressView.setItem(pos, 2, QTableWidgetItem("Download" if status == 0 else "Upload"))
+		self.progressView.setItem(pos, 3, QTableWidgetItem(str(size)))
+		self.progressView.setCellWidget(pos, 4, bar)
+		self.progressView.setItem(pos, 5, QTableWidgetItem("0 KB/s"))
+		self.progressView.setItem(pos, 6, QTableWidgetItem("-"))
+		self.progressDic[number] = bar
+
+	def renderProgress(self, dic):
+		pos = dic['no'] - 1
+		totalSize = int(self.progressView.item(pos, 3).text())
+		remaining = (totalSize - dic['size']) / dic['speed'] / 1000
+		self.progressDic[dic['no']].setValue(dic['size'] / totalSize * 100)
+		self.progressView.setItem(pos, 5, QTableWidgetItem(str(dic['speed']) + 'KB/s'))
+		self.progressView.setItem(pos, 6, QTableWidgetItem(str(remaining) + 's'))
+
+	def appendDirRow(self, dirView, row):
 		pos = dirView.rowCount()
 		dirView.insertRow(pos)
 		for i in range(6):

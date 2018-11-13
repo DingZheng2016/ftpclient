@@ -3,7 +3,7 @@ import utils
 from client import MyFTP
 from PyQt5.QtWidgets import QMainWindow, QPushButton, QApplication, QHBoxLayout, \
 	QLabel, QGridLayout, QWidget, QLineEdit, QTextBrowser, QTableWidget, QTableWidgetItem, \
-	QProgressBar
+	QProgressBar, QHeaderView
 from PyQt5.QtCore import pyqtSignal
 import multiprocessing
 import threading
@@ -118,13 +118,16 @@ class FTPClient(QMainWindow):
 		dir1View.setHorizontalHeaderLabels(("Name", "Type", "Size", "Last Modified", "Permissions", "Owner/Group"))
 		dir1View.setShowGrid(False)
 		dir1View.doubleClicked.connect(self.dir1clicked)
+		dir1View.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 		dir2View = QTableWidget(0, 6)
 		dir2View.setHorizontalHeaderLabels(("Name", "Type", "Size", "Last Modified", "Permissions", "Owner/Group"))
 		dir2View.setShowGrid(False)
 		dir2View.doubleClicked.connect(self.dir2clicked)
+		dir2View.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 		progressView = QTableWidget(0, 7)
 		progressView.setHorizontalHeaderLabels(("No.", "Filename", "Status", "Size", "Progress", "Speed", "Remaining Time"))
 		progressView.setShowGrid(False)
+		progressView.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 
 		mainLayout = QGridLayout()
 		mainLayout.addLayout(topLayout, 0, 0, 1, 3)

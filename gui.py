@@ -3,8 +3,9 @@ import utils
 from client import MyFTP
 from PyQt5.QtWidgets import QMainWindow, QPushButton, QApplication, QHBoxLayout, \
 	QLabel, QGridLayout, QWidget, QLineEdit, QTextBrowser, QTableWidget, QTableWidgetItem, \
-	QProgressBar, QHeaderView
-from PyQt5.QtCore import pyqtSignal
+	QProgressBar, QHeaderView, QAction, QMenu, QInputDialog
+from PyQt5.QtCore import pyqtSignal, Qt
+from PyQt5.QtGui import QCursor
 import multiprocessing
 import threading
 import time
@@ -119,11 +120,33 @@ class FTPClient(QMainWindow):
 		dir1View.setShowGrid(False)
 		dir1View.doubleClicked.connect(self.dir1clicked)
 		dir1View.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
 		dir2View = QTableWidget(0, 6)
 		dir2View.setHorizontalHeaderLabels(("Name", "Type", "Size", "Last Modified", "Permissions", "Owner/Group"))
 		dir2View.setShowGrid(False)
 		dir2View.doubleClicked.connect(self.dir2clicked)
 		dir2View.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
+		# Dir2 Menu
+		dir2View.setContextMenuPolicy(Qt.CustomContextMenu)
+		dir2View.customContextMenuRequested.connect(self.showRightMenu)
+
+		rightMenu1 = QMenu(dir2View)
+		rmdAction = QAction("Delete", dir2View)
+		rmdAction.triggered.connect(self.removedir)
+		rnAction = QAction("Rename", dir2View)
+		rnAction.triggered.connect(self.rename)
+		rightMenu1.addAction(rmdAction)
+		rightMenu1.addAction(rnAction)
+
+		rightMenu2 = QMenu(dir2View)
+		mkdAction = QAction("New Folder", dir2View)
+		mkdAction.triggered.connect(self.makedir)
+		rightMenu2.addAction(mkdAction)
+
+		self.rightMenu1 = rightMenu1
+		self.rightMenu2 = rightMenu2
+
 		progressView = QTableWidget(0, 7)
 		progressView.setHorizontalHeaderLabels(("No.", "Filename", "Status", "Size", "Progress", "Speed", "Remaining Time"))
 		progressView.setShowGrid(False)
@@ -207,15 +230,6 @@ class FTPClient(QMainWindow):
 			if self.exit:
 				break
 			time.sleep(0.000005)
-
-	'''
-	def updateDir1(self):
-		while True:
-			if self.exit:
-				break
-			self.renderDir1()
-			time.sleep(0.01)
-	'''
 
 	def updateProgress(self):
 		while True:
@@ -338,6 +352,35 @@ class FTPClient(QMainWindow):
 	def closeEvent(self, event):
 		self.exit = True
 		self.q_cmd.put('exit')
+
+	def showRightMenu(self, pos):
+		index = self.dir2View.selectionModel().currentIndex()
+		row = index.row()
+		col = index.column()
+		if row >= 1 and col >= 0:
+			self.curFilename = self.dir2View.item(row, 0).text()
+			self.rightMenu1.exec_(QCursor.pos())
+		else:
+			self.rightMenu2.exec_(QCursor.pos())
+
+	def removedir(self):
+		self.q_cmd.put('rm')
+		self.q_cmd.put(self.curFilename)
+
+	def rename(self):
+		value, ok = QInputDialog.getText(self, "Rename", "Input new name:", QLineEdit.Normal, "")
+		if not ok:
+			return
+		self.q_cmd.put('rename')
+		self.q_cmd.put(self.curFilename)
+		self.q_cmd.put(value)
+
+	def makedir(self):
+		value, ok = QInputDialog.getText(self, "New Folder", "Input folder name:", QLineEdit.Normal, "")
+		if not ok:
+			return
+		self.q_cmd.put('mkd')
+		self.q_cmd.put(value)
 
 
 if __name__ == "__main__":

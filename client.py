@@ -451,6 +451,19 @@ class MyFTP():
                     self.retrlines()
                 elif cmd == 'quit':
                     self.quit()
+                elif cmd == 'rm':
+                    d = q.get()
+                    self.rmd(d)
+                    self.retrlines()
+                elif cmd == 'rename':
+                    d1 = q.get()
+                    d2 = q.get()
+                    self.rename(d1, d2)
+                    self.retrlines()
+                elif cmd == 'mkd':
+                    d = q.get()
+                    self.mkd(d)
+                    self.retrlines()
                 elif cmd == 'exit':
                     break
             else:

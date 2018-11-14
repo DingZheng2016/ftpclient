@@ -147,8 +147,8 @@ class FTPClient(QMainWindow):
 		self.rightMenu1 = rightMenu1
 		self.rightMenu2 = rightMenu2
 
-		progressView = QTableWidget(0, 7)
-		progressView.setHorizontalHeaderLabels(("No.", "Filename", "Status", "Size", "Progress", "Speed", "Remaining Time"))
+		progressView = QTableWidget(0, 6)
+		progressView.setHorizontalHeaderLabels(("Filename", "Status", "Size", "Progress", "Speed", "Remaining Time"))
 		progressView.setShowGrid(False)
 		progressView.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 
@@ -326,22 +326,21 @@ class FTPClient(QMainWindow):
 		pos = self.progressView.rowCount()
 		self.progressView.insertRow(pos)
 		bar = QProgressBar()
-		self.progressView.setItem(pos, 0, QTableWidgetItem(str(number)))
-		self.progressView.setItem(pos, 1, QTableWidgetItem(filename))
-		self.progressView.setItem(pos, 2, QTableWidgetItem("Download" if status == 0 else "Upload"))
-		self.progressView.setItem(pos, 3, QTableWidgetItem(str(size)))
-		self.progressView.setCellWidget(pos, 4, bar)
-		self.progressView.setItem(pos, 5, QTableWidgetItem("0 KB/s"))
-		self.progressView.setItem(pos, 6, QTableWidgetItem("-"))
+		self.progressView.setItem(pos, 0, QTableWidgetItem(filename))
+		self.progressView.setItem(pos, 1, QTableWidgetItem("Download" if status == 0 else "Upload"))
+		self.progressView.setItem(pos, 2, QTableWidgetItem(str(size)))
+		self.progressView.setCellWidget(pos, 3, bar)
+		self.progressView.setItem(pos, 4, QTableWidgetItem("0 KB/s"))
+		self.progressView.setItem(pos, 5, QTableWidgetItem("-"))
 		self.progressDic[number] = bar
 
 	def renderProgress(self, dic):
 		pos = dic['no'] - 1
-		totalSize = int(self.progressView.item(pos, 3).text())
+		totalSize = int(self.progressView.item(pos, 2).text())
 		remaining = (totalSize - dic['size']) / dic['speed'] / 1000
 		self.progressDic[dic['no']].setValue(dic['size'] / totalSize * 100)
-		self.progressView.setItem(pos, 5, QTableWidgetItem(str(dic['speed']) + 'KB/s'))
-		self.progressView.setItem(pos, 6, QTableWidgetItem(str(remaining) + 's'))
+		self.progressView.setItem(pos, 4, QTableWidgetItem('%.2f' % dic['speed'] + 'KB/s'))
+		self.progressView.setItem(pos, 5, QTableWidgetItem('%.2f' % remaining + 's'))
 
 	def appendDirRow(self, dirView, row):
 		pos = dirView.rowCount()

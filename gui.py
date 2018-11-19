@@ -353,6 +353,8 @@ class FTPClient(QMainWindow):
 		self.q_cmd.put('exit')
 
 	def showRightMenu(self, pos):
+		if not self.connected:
+			return
 		index = self.dir2View.selectionModel().currentIndex()
 		row = index.row()
 		col = index.column()
@@ -363,10 +365,14 @@ class FTPClient(QMainWindow):
 			self.rightMenu2.exec_(QCursor.pos())
 
 	def removedir(self):
+		if not self.connected:
+			return
 		self.q_cmd.put('rm')
 		self.q_cmd.put(self.curFilename)
 
 	def rename(self):
+		if not self.connected:
+			return
 		value, ok = QInputDialog.getText(self, "Rename", "Input new name:", QLineEdit.Normal, "")
 		if not ok:
 			return
@@ -375,6 +381,8 @@ class FTPClient(QMainWindow):
 		self.q_cmd.put(value)
 
 	def makedir(self):
+		if not self.connected:
+			return
 		value, ok = QInputDialog.getText(self, "New Folder", "Input folder name:", QLineEdit.Normal, "")
 		if not ok:
 			return

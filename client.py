@@ -46,6 +46,13 @@ class MyFTP():
                 self.q_info.put(utils.colorful('PASS ' + password, 'purple'))
             self.sock.send(('PASS ' + password + '\r\n').encode())
             res = self.__recv()
+            if self.pipe and res.startswith('230'):
+                self.pipe.send('ok')
+            elif self.pipe:
+                self.pipe.send('error')
+        else:
+            if self.pipe:
+                self.pipe.send('error')
         return res
 
     def set_pasv(self, pasv):
@@ -182,6 +189,8 @@ class MyFTP():
         if self.pasv:
             self.sockf.connect((self.ip, self.port))
             res = self.__recv()
+            if not res.startswith('150'):
+                return
             totalSize = 0
             period = 0
             psize = 0
@@ -216,6 +225,8 @@ class MyFTP():
             self.sockf.bind(('0.0.0.0', self.port))
             self.sockf.listen(1)
             res = self.__recv()
+            if not res.startswith('150'):
+                return
             conn, addr = self.sockf.accept()
             totalSize = 0
             period = 0
@@ -263,6 +274,8 @@ class MyFTP():
         if self.pasv:
             self.sockf.connect((self.ip, self.port))
             res = self.__recv()
+            if not res.startswith('150'):
+                return
             totalSize = 0
             period = 0
             psize = 0
@@ -297,6 +310,8 @@ class MyFTP():
             self.sockf.bind(('0.0.0.0', self.port))
             self.sockf.listen(1)
             self.__recv()
+            if not res.startswith('150'):
+                return
             conn, addr = self.sockf.accept()
             totalSize = 0
             period = 0
@@ -342,6 +357,8 @@ class MyFTP():
         if self.pasv:
             self.sockf.connect((self.ip, self.port))
             res = self.__recv()
+            if not res.startswith('150'):
+                return
             dirinfo = ''
             while True:
                 res = self.sockf.recv(self.size).decode()
@@ -352,6 +369,8 @@ class MyFTP():
             self.sockf.bind(('0.0.0.0', self.port))
             self.sockf.listen(1)
             res = self.__recv()
+            if not res.startswith('150'):
+                return
             conn, addr = self.sockf.accept()
             dirinfo = ''
             with conn:
@@ -360,7 +379,6 @@ class MyFTP():
                     if not res:
                         break
                     dirinfo = dirinfo + res
-        print(dirinfo, end='')
         if self.q_dir2:
             self.q_dir2.put(dirinfo)
 

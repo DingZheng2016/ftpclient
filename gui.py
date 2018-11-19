@@ -11,6 +11,7 @@ import threading
 import time
 import subprocess
 import re
+import os
 
 
 class FTPClient(QMainWindow):
@@ -29,7 +30,7 @@ class FTPClient(QMainWindow):
 		self.initUI()
 		self.dir1info = ''
 
-		self.currentDir = '/'
+		self.currentDir = os.environ['HOME'] + '/'
 		self.progressNumber = 0
 		self.progressDic = {}
 
@@ -204,7 +205,8 @@ class FTPClient(QMainWindow):
 		self.q_cmd.put('login')
 		self.q_cmd.put(self.username)
 		self.q_cmd.put(self.password)
-
+		if not self.parentPipe.recv() == 'ok':
+			return
 		self.q_cmd.put('list')
 
 	def disconnect(self):
@@ -212,6 +214,7 @@ class FTPClient(QMainWindow):
 			return
 		self.q_info.put(utils.colorful('Disonnected from ' + self.ip + ':' + str(self.port), 'black'))
 		self.q_cmd.put('quit')
+		self.connected = False
 
 	def recvInfo(self):
 		while True:
@@ -295,7 +298,6 @@ class FTPClient(QMainWindow):
 			self.newProgress(self.progressNumber, val, size, 1)
 		else:
 			self.currentDir = self.currentDir + val + '/'
-			print(self.currentDir)
 			self.renderDir1()
 
 	def dir2clicked(self, mi):

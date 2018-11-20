@@ -148,6 +148,16 @@ class FTPClient(QMainWindow):
 		self.rightMenu1 = rightMenu1
 		self.rightMenu2 = rightMenu2
 
+		# Dir1 Menu
+		dir1View.setContextMenuPolicy(Qt.CustomContextMenu)
+		dir1View.customContextMenuRequested.connect(self.showDir1RightMenu)
+
+		rightMenu = QMenu(dir1View)
+		refreshAction = QAction("Refresh", dir1View)
+		refreshAction.triggered.connect(self.renderDir1)
+		rightMenu.addAction(refreshAction)
+		self.rightMenu = rightMenu
+
 		progressView = QTableWidget(0, 6)
 		progressView.setHorizontalHeaderLabels(("Filename", "Status", "Size", "Progress", "Speed", "Remaining Time"))
 		progressView.setShowGrid(False)
@@ -365,6 +375,9 @@ class FTPClient(QMainWindow):
 			self.rightMenu1.exec_(QCursor.pos())
 		else:
 			self.rightMenu2.exec_(QCursor.pos())
+
+	def showDir1RightMenu(self, pos):
+		self.rightMenu.exec_(QCursor.pos())
 
 	def removedir(self):
 		if not self.connected:

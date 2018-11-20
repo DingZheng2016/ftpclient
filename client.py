@@ -3,6 +3,7 @@ import re
 import random
 import utils
 import time
+import threading
 
 class MyFTP():
     def __init__(self):
@@ -185,193 +186,146 @@ class MyFTP():
         if self.q_info:
             self.q_info.put(utils.colorful('RETR ' + filename, 'purple'))
         self.sock.send(('RETR ' + filename + '\r\n').encode())
-        self.sockf = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sockf = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if self.pasv:
-            self.sockf.connect((self.ip, self.port))
+            sockf.connect((self.ip, self.port))
             res = self.__recv()
             if not res.startswith('150'):
                 return
-            totalSize = 0
-            period = 0
-            psize = 0
-            with open(currentDir + filename, 'wb') as f:
-                while True:
-                    start = time.time()
-                    res = self.sockf.recv(self.size)
-                    if not res:
-                        break
-                    f.write(res)
-                    totalSize += len(res)
-                    psize += len(res)
-                    end = time.time()
-                    period += end - start
-                    if period <= 0.2:
-                        continue
-                    dic = {}
-                    dic['no'] = currentNumber
-                    dic['speed'] = psize / period / 1024
-                    dic['size'] = totalSize
-                    if self.q_progress:
-                        self.q_progress.put(dic)
-                    period = 0
-                    psize = 0
+            th = threading.Thread(target=self.__retrfile, args=(currentDir, filename, currentNumber, sockf))
+            th.start()
+        else:
+            sockf.bind(('0.0.0.0', self.port))
+            sockf.listen(1)
+            res = self.__recv()
+            if not res.startswith('150'):
+                return
+            conn, addr = sockf.accept()
+            th = threading.Thread(target=self.__retrfile, args=(currentDir, filename, currentNumber, conn, sockf))
+            th.start()
+
+
+    def __retrfile(self, currentDir, filename, currentNumber, sockf, socklf=None):
+        totalSize = 0
+        period = 0
+        psize = 0
+        with open(currentDir + filename, 'wb') as f:
+            while True:
+                start = time.time()
+                res = sockf.recv(self.size)
+                if not res:
+                    break
+                f.write(res)
+                totalSize += len(res)
+                psize += len(res)
+                end = time.time()
+                period += end - start
+                if period <= 0.2:
+                    continue
                 dic = {}
                 dic['no'] = currentNumber
                 dic['speed'] = psize / period / 1024
                 dic['size'] = totalSize
                 if self.q_progress:
                     self.q_progress.put(dic)
-        else:
-            self.sockf.bind(('0.0.0.0', self.port))
-            self.sockf.listen(1)
-            res = self.__recv()
-            if not res.startswith('150'):
-                return
-            conn, addr = self.sockf.accept()
-            totalSize = 0
-            period = 0
-            psize = 0
-            with conn:
-                with open(currentDir + filename, 'wb') as f:
-                    while True:
-                        start = time.time()
-                        res = conn.recv(self.size)
-                        if not res:
-                            break
-                        f.write(res)
-                        totalSize += len(res)
-                        psize += len(res)
-                        end = time.time()
-                        period += end - start
-                        if period <= 0.2:
-                            continue
-
-                        dic = {}
-                        dic['no'] = currentNumber
-                        dic['speed'] = psize / period / 1024
-                        dic['size'] = totalSize
-                        if self.q_progress:
-                            self.q_progress.put(dic)
-                        period = 0
-                        psize = 0
-                    dic = {}
-                    dic['no'] = currentNumber
-                    dic['speed'] = psize / period / 1024
-                    dic['size'] = totalSize
-                    if self.q_progress:
-                        self.q_progress.put(dic)
-
-
+                period = 0
+                psize = 0
+            dic = {}
+            dic['no'] = currentNumber
+            dic['speed'] = psize / period / 1024
+            dic['size'] = totalSize
+            if self.q_progress:
+                self.q_progress.put(dic)
         res = self.__recv()
-        self.sockf.close()
+        sockf.close()
+        if socklf:
+            socklf.close()
         return res
 
     def __send_stor(self, filename, currentDir, currentNumber):
         if self.q_info:
             self.q_info.put(utils.colorful('STOR ' + filename, 'purple'))
         self.sock.send(('STOR ' + filename + '\r\n').encode())
-        self.sockf = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sockf = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if self.pasv:
-            self.sockf.connect((self.ip, self.port))
+            sockf.connect((self.ip, self.port))
             res = self.__recv()
             if not res.startswith('150'):
                 return
-            totalSize = 0
-            period = 0
-            psize = 0
-            with open(currentDir + filename, 'rb') as f:
-                while True:
-                    start = time.time()
-                    rep = f.read(self.size)
-                    self.sockf.send(rep)
-                    if not rep:
-                        break
-                    totalSize += len(rep)
-                    psize += len(rep)
-                    end = time.time()
-                    period += end - start
-                    if period <= 0.2:
-                        continue
-                    dic = {}
-                    dic['no'] = currentNumber
-                    dic['speed'] = psize / period / 1024
-                    dic['size'] = totalSize
-                    if self.q_progress:
-                        self.q_progress.put(dic)
-                    period = 0
-                    psize = 0
+            th = threading.Thread(target=self.__storfile, args=(currentDir, filename, currentNumber, sockf))
+            th.start()
+        else:
+            sockf.bind(('0.0.0.0', self.port))
+            sockf.listen(1)
+            self.__recv()
+            if not res.startswith('150'):
+                return
+            conn, addr = sockf.accept()
+            th = threading.Thread(target=self.__storfile, args=(currentDir, filename, currentDir, conn, sockf))
+            th.start()
+
+    def __storfile(self, currentDir, filename, currentNumber, sockf, socklf=None):
+        totalSize = 0
+        period = 0
+        psize = 0
+        with open(currentDir + filename, 'rb') as f:
+            while True:
+                start = time.time()
+                rep = f.read(self.size)
+                sockf.send(rep)
+                if not rep:
+                    break
+                totalSize += len(rep)
+                psize += len(rep)
+                end = time.time()
+                period += end - start
+                if period <= 0.2:
+                    continue
                 dic = {}
                 dic['no'] = currentNumber
                 dic['speed'] = psize / period / 1024
                 dic['size'] = totalSize
                 if self.q_progress:
                     self.q_progress.put(dic)
-        else:
-            self.sockf.bind(('0.0.0.0', self.port))
-            self.sockf.listen(1)
-            self.__recv()
-            if not res.startswith('150'):
-                return
-            conn, addr = self.sockf.accept()
-            totalSize = 0
-            period = 0
-            psize = 0
-            with conn:
-                with open(currentDir + filename, 'rb') as f:
-                    while True:
-                        start = time.time()
-                        rep = f.read(self.size)
-                        conn.send(rep)
-                        if not rep:
-                            break
-                        totalSize += len(rep)
-                        psize += len(rep)
-                        end = time.time()
-                        period += end - start
-                        if period <= 0.2:
-                            continue
-                        dic = {}
-                        dic['no'] = currentNumber
-                        dic['speed'] = psize / period / 1024
-                        dic['size'] = totalSize
-                        if self.q_progress:
-                            self.q_progress.put(dic)
-                        period = 0
-                        psize = 0
-                    dic = {}
-                    dic['no'] = currentNumber
-                    dic['speed'] = psize / period / 1024
-                    dic['size'] = totalSize
-                    if self.q_progress:
-                        self.q_progress.put(dic)
+                period = 0
+                psize = 0
+            dic = {}
+            dic['no'] = currentNumber
+            dic['speed'] = psize / period / 1024
+            dic['size'] = totalSize
+            if self.q_progress:
+                self.q_progress.put(dic)
 
-        self.sockf.close()
+        sockf.close()
+        if socklf:
+            socklf.close()
         res = self.__recv()
+        self.retrlines()
         return res
 
     def __send_list(self):
         if self.q_info:
             self.q_info.put(utils.colorful('LIST', 'purple'))
         self.sock.send(('LIST' + '\r\n').encode())
-        self.sockf = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sockf = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if self.pasv:
-            self.sockf.connect((self.ip, self.port))
+            sockf.connect((self.ip, self.port))
             res = self.__recv()
             if not res.startswith('150'):
                 return
             dirinfo = ''
             while True:
-                res = self.sockf.recv(self.size).decode()
+                res = sockf.recv(self.size).decode()
                 if not res:
                     break
                 dirinfo = dirinfo + res
         else:
-            self.sockf.bind(('0.0.0.0', self.port))
-            self.sockf.listen(1)
+            sockf.bind(('0.0.0.0', self.port))
+            sockf.listen(1)
             res = self.__recv()
             if not res.startswith('150'):
                 return
-            conn, addr = self.sockf.accept()
+            conn, addr = sockf.accept()
             dirinfo = ''
             with conn:
                 while True:
@@ -383,7 +337,7 @@ class MyFTP():
             self.q_dir2.put(dirinfo)
 
         res = self.__recv()
-        self.sockf.close()
+        sockf.close()
         return res
 
     def __send_mkd(self, dirname):
@@ -466,7 +420,6 @@ class MyFTP():
                     currentDir = q.get()
                     currentNumber = q.get()
                     self.storbinary(d, currentDir, currentNumber)
-                    self.retrlines()
                 elif cmd == 'quit':
                     self.quit()
                 elif cmd == 'rm':
